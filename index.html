@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Instadoc Admin Dashboard</title>
+
+    <!-- Supabase Client (v2) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="script.js"></script>
+  </head>
+
+  <body id="app-body" class="view-login">
+    <!-- Background decoration (optional) -->
+    <div class="background-decoration" aria-hidden="true">
+      <div class="circle circle-1"></div>
+      <div class="circle circle-2"></div>
+      <div class="circle circle-3"></div>
+    </div>
+
+    <!-- =========================
+       LOGIN VIEW
+       ========================= -->
+    <main id="login-view" class="login-container" role="main">
+      <section class="login-box" aria-label="Admin login">
+        <div class="login-header">
+          <div class="dashboard-logo">
+            <img
+              src="assets/instadoc_logo_transparent.png"
+              alt="Instadoc Logo"
+            />
+          </div>
+          <h1>Admin</h1>
+          <p>Secure Dashboard Access</p>
+        </div>
+
+        <form id="loginForm" class="auth-form" novalidate>
+          <div
+            id="login-alert"
+            class="alert alert-error hidden"
+            role="alert"
+          ></div>
+
+          <div class="form-group">
+            <label for="email">Email Address</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="admin@instadoc.com"
+              required
+              autocomplete="username"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+
+          <button id="loginBtn" type="submit" class="btn-primary">
+            <span class="btn-text">Sign In</span>
+            <span class="btn-loader hidden" aria-hidden="true">⏳</span>
+          </button>
+        </form>
+      </section>
+    </main>
+
+    <!-- =========================
+       DASHBOARD VIEW
+       ========================= -->
+    <div id="dashboard-view" class="hidden">
+      <header class="header">
+        <div class="header-content">
+          <div class="header-left">
+            <div class="dashboard-logo">
+              <img
+                src="assets/instadoc_logo_transparent.png"
+                alt="Instadoc Logo"
+              />
+            </div>
+            <h1>Dashboard</h1>
+          </div>
+
+          <div class="header-right">
+            <span id="admin-email" class="user-email">--</span>
+            <button id="logoutBtn" class="btn-logout" type="button">
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="container">
+        <!-- Tabs -->
+        <nav class="nav-tabs" aria-label="Dashboard navigation">
+          <button class="nav-tab active" data-target="users" type="button">
+            👥 User Management
+          </button>
+          <button class="nav-tab" data-target="metrics" type="button">
+            📊 Live Metrics
+          </button>
+          <button class="nav-tab" data-target="support" type="button">
+            🎫 Support Tickets
+          </button>
+          <button class="nav-tab" data-target="doctors" type="button">
+            🩺 Doctor Workflows
+          </button>
+        </nav>
+
+        <!-- =========================
+           TAB: USER MANAGEMENT
+           ========================= -->
+        <section
+          id="users"
+          class="tab-content active"
+          aria-label="User management"
+        >
+          <h2 class="section-title">User Management</h2>
+
+          <div class="controls-bar">
+            <button
+              id="openCreateUserBtn"
+              class="btn-primary user-only"
+              type="button"
+            >
+              + New User
+            </button>
+
+            <div class="search-box">
+              <input
+                id="userSearch"
+                type="text"
+                placeholder="🔍 Search users by email, name, or ID..."
+              />
+            </div>
+
+            <div class="filter-group">
+              <select
+                id="roleFilter"
+                class="filter-select"
+                aria-label="Role filter"
+              >
+                <option value="all">All Roles</option>
+                <option value="admin">Admin</option>
+                <option value="doctor">Doctor</option>
+                <option value="patient">Patient</option>
+              </select>
+
+              <select
+                id="statusFilter"
+                class="filter-select"
+                aria-label="Status filter"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+
+            <button id="refreshUsersBtn" class="btn-refresh" type="button">
+              🔄 Refresh
+            </button>
+          </div>
+
+          <div
+            class="table-container"
+            role="region"
+            aria-label="Users table"
+            tabindex="0"
+          >
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>User ID</th>
+                  <th>Full Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Joined</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr>
+                  <td class="empty-state" colspan="8">Loading users...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="muted-note">
+            Note: “Delete” is intentionally implemented as
+            <strong>Archive</strong> (soft delete) for healthcare safety and
+            auditability.
+          </p>
+        </section>
+
+        <!-- =========================
+           TAB: METRICS
+           ========================= -->
+        <section id="metrics" class="tab-content" aria-label="Live metrics">
+          <h2 class="section-title">Platform Health &amp; Analytics</h2>
+
+          <div class="stats-grid">
+            <div class="stat-card users">
+              <h3>👥 Total Users</h3>
+              <div id="count-users" class="value">
+                <span class="loading-spinner">⏳</span>
+              </div>
+              <div class="trend">Registered Accounts</div>
+            </div>
+
+            <div class="stat-card doctors">
+              <h3>💉 BP Logs</h3>
+              <div id="count-bp" class="value">
+                <span class="loading-spinner">⏳</span>
+              </div>
+              <div class="trend">Blood Pressure Readings</div>
+            </div>
+
+            <div class="stat-card patients">
+              <h3>⚖️ Weight Logs</h3>
+              <div id="count-weight" class="value">
+                <span class="loading-spinner">⏳</span>
+              </div>
+              <div class="trend">Weight Measurements</div>
+            </div>
+
+            <div class="stat-card sessions">
+              <h3>🩸 Glucose Logs</h3>
+              <div id="count-glucose" class="value">
+                <span class="loading-spinner">⏳</span>
+              </div>
+              <div class="trend">Blood Sugar Readings</div>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-title">📊 Recent Health Logs</div>
+
+            <div class="controls-bar" style="margin-bottom: 15px">
+              <select
+                id="logTypeFilter"
+                class="filter-select"
+                aria-label="Log type"
+              >
+                <option value="all">All Logs</option>
+                <option value="bp">Blood Pressure</option>
+                <option value="weight">Weight</option>
+                <option value="glucose">Glucose</option>
+              </select>
+              <button id="refreshLogsBtn" class="btn-refresh" type="button">
+                🔄 Refresh
+              </button>
+            </div>
+
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>User</th>
+                    <th>Reading</th>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="recentLogsBody">
+                  <tr>
+                    <td class="empty-state" colspan="5">
+                      Loading recent logs...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-title">🔔 Live Activity Feed</div>
+            <div id="activityLog" class="activity-log" aria-live="polite">
+              <div class="activity-item">
+                <div class="time">⏰ Loading...</div>
+                <div class="description">
+                  Fetching recent platform activity...
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <div class="chart-title">📊 This Week's Platform Activity</div>
+              <div class="chart-legend">
+                <span class="legend-item"><span class="legend-dot" style="background:#2daa2d"></span>Health Logs</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>New Users</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Tickets</span>
+              </div>
+            </div>
+            <div id="weeklyChart" class="bar-chart-v2" aria-label="Weekly activity chart">
+              <!-- Bars are generated by JS -->
+            </div>
+            <div class="chart-total-row" id="chartTotalRow"></div>
+          </div>
+        </section>
+
+        <!-- =========================
+           TAB: SUPPORT TICKETS
+           ========================= -->
+        <section id="support" class="tab-content" aria-label="Support tickets">
+          <h2 class="section-title">Support Requests</h2>
+
+          <div class="stats-grid">
+            <div class="stat-card urgent">
+              <h3>🔵 Open Tickets</h3>
+              <div id="openTickets" class="value">0</div>
+              <div class="trend">Requires Attention</div>
+            </div>
+            <div class="stat-card pending">
+              <h3>🟡 In Progress</h3>
+              <div id="progressTickets" class="value">0</div>
+              <div class="trend">Being Handled</div>
+            </div>
+            <div class="stat-card resolved">
+              <h3>🟢 Resolved</h3>
+              <div id="resolvedTickets" class="value">0</div>
+              <div class="trend">Completed</div>
+            </div>
+            <div class="stat-card info">
+              <h3>⏱️ Avg Response</h3>
+              <div id="avgResponse" class="value" style="font-size: 28px">
+                N/A
+              </div>
+              <div class="trend">Response Time</div>
+            </div>
+          </div>
+
+          <div class="controls-bar">
+            <div class="search-box">
+              <input
+                id="ticketSearch"
+                type="text"
+                placeholder="🔍 Search tickets by ID, user, or subject..."
+              />
+            </div>
+
+            <div class="filter-group">
+              <select
+                id="priorityFilter"
+                class="filter-select"
+                aria-label="Priority filter"
+              >
+                <option value="all">All Priorities</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+
+              <select
+                id="ticketStatusFilter"
+                class="filter-select"
+                aria-label="Ticket status filter"
+              >
+                <option value="all">All Status</option>
+                <option value="open">Open</option>
+                <option value="progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+
+            <button id="refreshTicketsBtn" class="btn-refresh" type="button">
+              🔄 Refresh
+            </button>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>User</th>
+                  <th>Subject</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ticketTableBody">
+                <tr>
+                  <td class="empty-state" colspan="8">Loading tickets...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Ticket side panel -->
+          <aside
+            id="ticketPanel"
+            class="side-panel hidden"
+            aria-label="Ticket details"
+          >
+            <div class="panel-header">
+              <h3>Ticket Details</h3>
+              <button id="closeTicketPanelBtn" type="button">✖</button>
+            </div>
+            <div id="ticketThread" class="thread"></div>
+            <textarea id="ticketReply" placeholder="Type reply..."></textarea>
+            <button id="sendTicketReplyBtn" class="btn-primary" type="button">
+              Send Reply
+            </button>
+          </aside>
+        </section>
+
+        <!-- =========================
+           TAB: DOCTOR WORKFLOWS
+           ========================= -->
+        <section id="doctors" class="tab-content" aria-label="Doctor workflows">
+          <h2 class="section-title">Doctor Workflows</h2>
+
+          <div class="controls-bar">
+            <div class="search-box">
+              <input
+                id="doctorSearch"
+                type="text"
+                placeholder="Search doctors..."
+              />
+            </div>
+            <button id="refreshDoctorsBtn" class="btn-refresh" type="button">
+              🔄 Refresh
+            </button>
+          </div>
+
+          <div class="two-col">
+            <div>
+              <h3>Doctors</h3>
+              <div id="doctorList" class="list-panel">Loading...</div>
+            </div>
+
+            <div>
+              <h3>Assigned Patients</h3>
+              <div class="doctor-actions">
+                <button
+                  id="openAssignPatientBtn"
+                  class="btn btn-activate"
+                  type="button"
+                  disabled
+                >
+                  + Assign Patient
+                </button>
+                <button
+                  id="unassignAllBtn"
+                  class="btn btn-inactive"
+                  type="button"
+                  disabled
+                >
+                  Unassign All
+                </button>
+              </div>
+              <div id="patientList" class="list-panel">Select a doctor</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- =========================
+       MODALS
+       ========================= -->
+    <!-- User Modal (View/Edit) -->
+    <div
+      id="userModal"
+      class="modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="userModalTitle"
+    >
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          type="button"
+          id="closeUserModalBtn"
+          aria-label="Close user modal"
+        >
+          ×
+        </button>
+        <h2 id="userModalTitle">User</h2>
+        <div id="userModalBody">
+          <p>Loading...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div
+      id="createUserModal"
+      class="modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="createUserTitle"
+    >
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          type="button"
+          id="closeCreateUserModalBtn"
+          aria-label="Close create user modal"
+        >
+          ×
+        </button>
+        <h3 id="createUserTitle">Create New User</h3>
+
+        <form id="createUserForm">
+          <label for="newUserEmail">Email</label>
+          <input id="newUserEmail" type="email" required />
+
+          <label for="newUserPassword">Temporary Password</label>
+          <input id="newUserPassword" type="password" required />
+
+          <label for="newUserName">Full Name</label>
+          <input id="newUserName" type="text" required />
+
+          <label for="newUserRole">Role</label>
+          <select id="newUserRole" required>
+            <option value="patient">Patient</option>
+            <option value="doctor">Doctor</option>
+            <option value="admin">Admin</option>
+          </select>
+
+          <button class="btn-primary" type="submit">Create User</button>
+        </form>
+
+        <p class="muted-note">
+          This action creates an Auth user (email/password) and a profile
+          record. Ensure your Supabase RLS allows admins to perform this action.
+        </p>
+      </div>
+    </div>
+
+    <!-- Assign Patient Modal -->
+    <div
+      id="assignPatientModal"
+      class="modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="assignPatientTitle"
+    >
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          type="button"
+          id="closeAssignPatientModalBtn"
+          aria-label="Close assign patient modal"
+        >
+          ×
+        </button>
+        <h3 id="assignPatientTitle">Assign Patient to Doctor</h3>
+
+        <div class="controls-bar">
+          <div class="search-box">
+            <input
+              id="patientSearch"
+              type="text"
+              placeholder="Search patients..."
+            />
+          </div>
+          <button
+            id="refreshPatientPickerBtn"
+            class="btn-refresh"
+            type="button"
+          >
+            🔄 Refresh
+          </button>
+        </div>
+
+        <div
+          id="patientPickerList"
+          class="list-panel"
+          style="max-height: 360px"
+        >
+          Loading...
+        </div>
+
+        <p class="muted-note">
+          Assignments are stored in
+          <code>doctor_patient_assignments</code> (soft governance, auditable)
+          and mirrored in the Live Activity feed.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
