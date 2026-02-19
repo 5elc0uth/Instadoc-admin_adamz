@@ -1204,9 +1204,89 @@ function activityIcon(module, action) {
   return "🔔";
 }
 
+// Pagination state for activity feed
+const activityFeedState = {
+  page: 0,
+  pageSize: 20,
+  allItems: [],
+  profileMap: {},
+  emailMap: {},
+  loaded: false,
+};
+
+function renderActivityPage() {
+  const container = $("activityLog");
+  if (!container) return;
+
+  const { allItems, page, pageSize } = activityFeedState;
+  const itemsToShow = allItems.slice(0, (page + 1) * pageSize);
+  const hasMore = itemsToShow.length < allItems.length;
+
+  container.innerHTML = "";
+
+  if (!itemsToShow.length) {
+    container.innerHTML = '<div class="activity-item"><div class="description">No recent activity</div></div>';
+    return;
+  }
+
+  itemsToShow.forEach((a) => {
+    const item = document.createElement("div");
+    item.className = "activity-item";
+    const icon =
+      a.kind === "appointment"
+        ? "📅"
+        : a.kind === "health"
+        ? a.action === "bp"
+          ? "🩸"
+          : a.action === "weight"
+            ? "⚖️"
+            : "🧪"
+        : activityIcon(a.module, a.action);
+
+    item.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div class="time">⏰ ${escapeHtml(timeAgo(a.created_at))}</div>
+          <div class="description">${icon} ${escapeHtml(a.description || "")}</div>
+        </div>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+
+  // Add or remove Load More button
+  const existing = $("activityLoadMore");
+  if (existing) existing.remove();
+
+  if (hasMore) {
+    const btn = document.createElement("button");
+    btn.id = "activityLoadMore";
+    btn.textContent = `Load more (${allItems.length - itemsToShow.length} remaining)`;
+    btn.style.cssText = `
+      display:block; width:100%; margin-top:10px; padding:8px;
+      background:transparent; border:1px solid #ccc; border-radius:6px;
+      cursor:pointer; color:#555; font-size:13px;
+    `;
+    btn.onmouseover = () => btn.style.background = "#f5f5f5";
+    btn.onmouseout  = () => btn.style.background = "transparent";
+    btn.onclick = () => {
+      activityFeedState.page++;
+      renderActivityPage();
+    };
+    container.appendChild(btn);
+  }
+}
+
 async function loadActivityFeed() {
   const container = $("activityLog");
   if (!container) return;
+
+  // Reset pagination on fresh load
+  activityFeedState.page = 0;
+  activityFeedState.allItems = [];
+  activityFeedState.loaded = false;
+
+  container.innerHTML = `<div class="activity-item"><div class="description">⏳ Loading...</div></div>`;
 
   try {
     // Build a profile map so we can display names instead of emails everywhere
@@ -1224,6 +1304,9 @@ async function loadActivityFeed() {
       if (p.email) emailToName[p.email] = name;
     });
 
+    activityFeedState.profileMap = idToName;
+    activityFeedState.emailMap   = emailToName;
+
     // Platform activity (admin actions, assignments, ticket updates, etc.)
     const { data: act, error } = await supabaseClient
       .from("platform_activity")
@@ -1231,7 +1314,7 @@ async function loadActivityFeed() {
         "id, module, action, description, created_at, actor_id, target_user_id",
       )
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(200);
 
     if (error) throw error;
 
@@ -1264,25 +1347,31 @@ async function loadActivityFeed() {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const [bpRes, weightRes, glucoseRes] = await Promise.all([
+    const [bpRes, weightRes, glucoseRes, apptRes] = await Promise.all([
       supabaseClient
         .from("bp_logs")
         .select("user_id, systolic, diastolic, created_at")
         .gte("created_at", weekAgo.toISOString())
         .order("created_at", { ascending: false })
-        .limit(20),
+        .limit(100),
       supabaseClient
         .from("weight_logs")
         .select("user_id, weight, created_at")
         .gte("created_at", weekAgo.toISOString())
         .order("created_at", { ascending: false })
-        .limit(20),
+        .limit(100),
       supabaseClient
         .from("glucose_logs")
         .select("user_id, level, created_at")
         .gte("created_at", weekAgo.toISOString())
         .order("created_at", { ascending: false })
-        .limit(20),
+        .limit(100),
+      supabaseClient
+        .from("appointments")
+        .select("user_id, patient_name, doctor_name, type, status, created_at")
+        .gte("created_at", weekAgo.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(100),
     ]);
 
     const healthItems = [];
@@ -1329,41 +1418,27 @@ async function loadActivityFeed() {
       });
     });
 
-    // Merge + sort by time
-    const merged = [...platformItems, ...healthItems]
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 20);
-
-    container.innerHTML = "";
-
-    if (!merged.length) {
-      container.innerHTML =
-        '<div class="activity-item"><div class="description">No recent activity</div></div>';
-      return;
-    }
-
-    merged.forEach((a) => {
-      const item = document.createElement("div");
-      item.className = "activity-item";
-      const icon =
-        a.kind === "health"
-          ? a.action === "bp"
-            ? "🩸"
-            : a.action === "weight"
-              ? "⚖️"
-              : "🧪"
-          : activityIcon(a.module, a.action);
-
-      item.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div class="time">⏰ ${escapeHtml(timeAgo(a.created_at))}</div>
-            <div class="description">${icon} ${escapeHtml(a.description || "")}</div>
-          </div>
-        </div>
-      `;
-      container.appendChild(item);
+    const apptItems = [];
+    (apptRes.data || []).forEach((x) => {
+      const patientName = x.patient_name || idToName[x.user_id]?.name || "Unknown Patient";
+      const doctorName  = x.doctor_name || "Unknown Doctor";
+      const apptType    = x.type || "appointment";
+      apptItems.push({
+        kind: "appointment",
+        module: "appointments",
+        action: "created",
+        created_at: x.created_at,
+        description: `${patientName} booked a ${apptType} with ${doctorName}`,
+      });
     });
+
+    // Merge + sort by time (no slice — keep all for pagination)
+    activityFeedState.allItems = [...platformItems, ...healthItems, ...apptItems]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    activityFeedState.loaded = true;
+    renderActivityPage();
+
   } catch (err) {
     console.error("loadActivityFeed error:", err);
     container.innerHTML =
@@ -1437,12 +1512,13 @@ async function loadWeeklyChart() {
     const weekStart = new Date(days[0] + "T00:00:00").toISOString();
 
     // Fetch all data sources in parallel
-    const [bpRes, weightRes, glucoseRes, usersRes, ticketsRes] = await Promise.all([
+    const [bpRes, weightRes, glucoseRes, usersRes, ticketsRes, apptRes] = await Promise.all([
       supabaseClient.from("bp_logs").select("created_at").gte("created_at", weekStart),
       supabaseClient.from("weight_logs").select("created_at").gte("created_at", weekStart),
       supabaseClient.from("glucose_logs").select("created_at").gte("created_at", weekStart),
       supabaseClient.from("profiles").select("created_at").gte("created_at", weekStart),
       supabaseClient.from("tickets").select("created_at").gte("created_at", weekStart),
+      supabaseClient.from("appointments").select("created_at").gte("created_at", weekStart),
     ]);
 
     // Convert UTC timestamp to local YYYY-MM-DD string for matching
@@ -1472,8 +1548,9 @@ async function loadWeeklyChart() {
     ]);
     const userCounts   = countPerDay(usersRes.data || []);
     const ticketCounts = countPerDay(ticketsRes.data || []);
+    const apptCounts   = countPerDay(apptRes.data || []);
 
-    const allValues = [...healthCounts, ...userCounts, ...ticketCounts];
+    const allValues = [...healthCounts, ...userCounts, ...ticketCounts, ...apptCounts];
     const maxVal = Math.max(...allValues, 1);
 
     // Day labels derived from actual dates (not hardcoded Mon-Sun)
@@ -1492,15 +1569,18 @@ async function loadWeeklyChart() {
       const h = healthCounts[i];
       const u = userCounts[i];
       const t = ticketCounts[i];
-      const total = h + u + t;
+      const ap = apptCounts[i];
+      const total = h + u + t + ap;
 
-      const hh = h > 0 ? Math.max(6, Math.round((h / maxVal) * BAR_MAX_H)) : 0;
-      const uh = u > 0 ? Math.max(6, Math.round((u / maxVal) * BAR_MAX_H)) : 0;
-      const th = t > 0 ? Math.max(6, Math.round((t / maxVal) * BAR_MAX_H)) : 0;
+      const hh  = h  > 0 ? Math.max(6, Math.round((h  / maxVal) * BAR_MAX_H)) : 0;
+      const uh  = u  > 0 ? Math.max(6, Math.round((u  / maxVal) * BAR_MAX_H)) : 0;
+      const th  = t  > 0 ? Math.max(6, Math.round((t  / maxVal) * BAR_MAX_H)) : 0;
+      const aph = ap > 0 ? Math.max(6, Math.round((ap / maxVal) * BAR_MAX_H)) : 0;
 
-      const healthBar = h > 0 ? `<div class="day-bar" style="height:${hh}px;background:#2daa2d;" title="Health logs: ${h}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
-      const userBar   = u > 0 ? `<div class="day-bar" style="height:${uh}px;background:#3b82f6;" title="New users: ${u}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
-      const ticketBar = t > 0 ? `<div class="day-bar" style="height:${th}px;background:#f59e0b;" title="Tickets: ${t}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const healthBar = h  > 0 ? `<div class="day-bar" style="height:${hh}px;background:#2daa2d;"   title="Health logs: ${h}"></div>`   : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const userBar   = u  > 0 ? `<div class="day-bar" style="height:${uh}px;background:#3b82f6;"   title="New users: ${u}"></div>`     : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const ticketBar = t  > 0 ? `<div class="day-bar" style="height:${th}px;background:#f59e0b;"   title="Tickets: ${t}"></div>`       : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const apptBar   = ap > 0 ? `<div class="day-bar" style="height:${aph}px;background:#8b5cf6;"  title="Appointments: ${ap}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
 
       // Get actual day name from the date string
       const dayName = dayLabels[new Date(dateStr + "T12:00:00").getDay()];
@@ -1509,7 +1589,7 @@ async function loadWeeklyChart() {
       return `
         <div class="day-group">
           <div class="day-bars">
-            ${healthBar}${userBar}${ticketBar}
+            ${healthBar}${userBar}${ticketBar}${apptBar}
           </div>
           <div class="day-label">${dayName}</div>
           <div class="day-total">${total > 0 ? dayNum : ""}</div>
