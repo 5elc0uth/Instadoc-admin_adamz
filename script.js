@@ -241,7 +241,7 @@ async function checkAdminAndLoad(user) {
   setLoading(false);
 }
 
-// Polls profile every 60 seconds — kicks admin out if their OWN account is suspended/archived mid-session
+// Polls profile every 10 seconds — kicks users out quickly if suspended/archived/deactivated mid-session
 function startSessionWatcher(userId) {
   // Clear any existing watcher
   if (state._sessionWatcher) clearInterval(state._sessionWatcher);
@@ -258,6 +258,7 @@ function startSessionWatcher(userId) {
         !profile ||
         profile.deleted_at !== null ||
         profile.status === "suspended" ||
+        profile.status === "inactive" ||
         profile.role !== "admin";
 
       if (blocked) {
@@ -270,7 +271,7 @@ function startSessionWatcher(userId) {
     } catch (_) {
       // Network hiccup — don't kick out, try again next cycle
     }
-  }, 60000); // Check every 60 seconds
+  }, 10000); // Check every 10 seconds for near-instant logout
 }
 
 
@@ -771,6 +772,13 @@ async function changeUserStatus(userId, newStatus) {
         ? "deactivate"
         : "activate";
 
+  const actionPastTense = 
+    newStatus === "suspended"
+      ? "suspended"
+      : newStatus === "inactive"
+        ? "deactivated"
+        : "activated";
+
   // Describe what will happen to the user for confirmation
   const consequenceMap = {
     suspended: "They will be immediately logged out and BLOCKED from logging in again.",
@@ -793,28 +801,33 @@ async function changeUserStatus(userId, newStatus) {
 
     if (error) throw error;
 
-    // SUSPEND: Hard block — attempt immediate session revocation
+    // Broadcast a force-logout signal on a user-specific channel.
+    // The patient/doctor app should subscribe to this channel and sign out when received.
+    // This works without a service role key.
+    await supabaseClient
+      .channel(`force-logout:${userId}`)
+      .send({
+        type: "broadcast",
+        event: "force_logout",
+        payload: { reason: newStatus },
+      });
+
+    // Also attempt hard revocation via admin API (only works with service role key — silent fail otherwise)
     if (newStatus === "suspended") {
-      try {
-        await supabaseClient.auth.admin.signOut(userId);
-      } catch (_) {
-        // Requires service role key — DB trigger handles it instead
-      }
+      try { await supabaseClient.auth.admin.signOut(userId); } catch (_) {}
     }
-    // INACTIVE (Deactivate): Soft block — session watcher will catch it within 60s
-    // ACTIVE (Activate): No logout needed — restoring access
 
     await logAdminAction({
       module: "users",
       action: newStatus,
       target_user_id: userId,
-      description: `${state.currentAdminName} ${actionWord}d ${u.full_name || u.email}.`,
+      description: `${state.currentAdminName} ${actionPastTense} ${u.full_name || u.email}.`,
       reason,
     });
 
     const resultMsg = {
-      suspended: "✅ User suspended! They are now blocked from accessing the app.",
-      inactive:  "✅ User deactivated. They will be logged out within 60 seconds.",
+      suspended: "✅ User suspended! They will be logged out within 10 seconds.",
+      inactive:  "✅ User deactivated. They will be logged out within 10 seconds.",
       active:    "✅ User activated! Their access has been restored.",
     };
 
@@ -853,13 +866,17 @@ async function archiveUser(userId) {
 
     if (error) throw error;
 
-    // Force logout the archived user's active sessions
-    try {
-      await supabaseClient.auth.admin.signOut(userId);
-    } catch (_) {
-      // admin.signOut requires service role key — silently skip if unavailable
-      // The deleted_at check on next page load will block them anyway
-    }
+    // Broadcast force-logout signal so the user's app logs them out within seconds
+    await supabaseClient
+      .channel(`force-logout:${userId}`)
+      .send({
+        type: "broadcast",
+        event: "force_logout",
+        payload: { reason: "archived" },
+      });
+
+    // Also attempt hard revocation (silent fail without service role key)
+    try { await supabaseClient.auth.admin.signOut(userId); } catch (_) {}
 
     await logAdminAction({
       module: "users",
@@ -974,10 +991,10 @@ async function createUser(e) {
       });
     }
 
-    // Create profile row
+    // Upsert profile row (trigger may have already created it)
     const { error: profileError } = await supabaseClient
       .from("profiles")
-      .insert({
+      .upsert({
         id: newUserId,
         email,
         full_name,
@@ -985,7 +1002,7 @@ async function createUser(e) {
         status: "active",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: "id" });
 
     if (profileError) throw profileError;
 
@@ -1107,7 +1124,7 @@ async function loadRecentLogs() {
         allLogs.push({
           ...log,
           type: "Glucose",
-          reading: `${log.glucose_level} mg/dL`,
+          reading: `${log.level} mg/dL`,
           user_name: profileMap[log.user_id] || "Unknown User",
         }),
       );
@@ -1149,8 +1166,8 @@ function getHealthStatus(log) {
     return { class: "badge-normal", text: "Normal" };
   }
   if (log.type === "Glucose") {
-    if (log.glucose_level > 140) return { class: "badge-high", text: "High" };
-    if (log.glucose_level < 70) return { class: "badge-low", text: "Low" };
+    if (log.level > 140) return { class: "badge-high", text: "High" };
+    if (log.level < 70) return { class: "badge-low", text: "Low" };
     return { class: "badge-normal", text: "Normal" };
   }
   return { class: "badge-normal", text: "Logged" };
@@ -1262,7 +1279,7 @@ async function loadActivityFeed() {
         .limit(20),
       supabaseClient
         .from("glucose_logs")
-        .select("user_id, glucose_level, created_at")
+        .select("user_id, level, created_at")
         .gte("created_at", weekAgo.toISOString())
         .order("created_at", { ascending: false })
         .limit(20),
@@ -1302,13 +1319,13 @@ async function loadActivityFeed() {
       const user = idToName[x.user_id];
       if (user?.deleted_at) return;
       const name = user?.name || "Unknown User";
-      if (x.glucose_level == null) return;
+      if (x.level == null) return;
       healthItems.push({
         kind: "health",
         module: "health",
         action: "glucose",
         created_at: x.created_at,
-        description: `${name} logged glucose ${x.glucose_level} mg/dL`,
+        description: `${name} logged glucose ${x.level} mg/dL`,
       });
     });
 
@@ -1403,17 +1420,23 @@ async function loadWeeklyChart() {
 
   try {
     const today = new Date();
-    // Build array of last 7 days starting from Monday of this week
+
+    // Build last 7 days as YYYY-MM-DD strings in LOCAL time
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      days.push(d);
+      // Format as local date string YYYY-MM-DD
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      days.push(`${yyyy}-${mm}-${dd}`);
     }
-    const weekStart = days[0].toISOString();
 
-    // Fetch all three data sources in parallel
+    // weekStart = beginning of earliest day in UTC
+    const weekStart = new Date(days[0] + "T00:00:00").toISOString();
+
+    // Fetch all data sources in parallel
     const [bpRes, weightRes, glucoseRes, usersRes, ticketsRes] = await Promise.all([
       supabaseClient.from("bp_logs").select("created_at").gte("created_at", weekStart),
       supabaseClient.from("weight_logs").select("created_at").gte("created_at", weekStart),
@@ -1422,13 +1445,21 @@ async function loadWeeklyChart() {
       supabaseClient.from("tickets").select("created_at").gte("created_at", weekStart),
     ]);
 
-    // Helper: count rows per day-of-week index (0=Mon ... 6=Sun relative to days[])
+    // Convert UTC timestamp to local YYYY-MM-DD string for matching
+    function toLocalDateStr(isoStr) {
+      const d = new Date(isoStr);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    // Count rows per day using local date string matching
     function countPerDay(rows) {
       const counts = Array(7).fill(0);
       (rows || []).forEach((r) => {
-        const d = new Date(r.created_at);
-        d.setHours(0, 0, 0, 0);
-        const idx = days.findIndex((day) => day.getTime() === d.getTime());
+        const localDate = toLocalDateStr(r.created_at);
+        const idx = days.indexOf(localDate);
         if (idx !== -1) counts[idx]++;
       });
       return counts;
@@ -1439,18 +1470,17 @@ async function loadWeeklyChart() {
       ...(weightRes.data || []),
       ...(glucoseRes.data || []),
     ]);
-    const userCounts  = countPerDay(usersRes.data || []);
+    const userCounts   = countPerDay(usersRes.data || []);
     const ticketCounts = countPerDay(ticketsRes.data || []);
 
-    // Overall max for scaling (use at least 1 to avoid division by zero)
     const allValues = [...healthCounts, ...userCounts, ...ticketCounts];
     const maxVal = Math.max(...allValues, 1);
 
-    const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const BAR_MAX_H = 160; // px
+    // Day labels derived from actual dates (not hardcoded Mon-Sun)
+    const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const BAR_MAX_H = 160;
 
     const hasAnyData = allValues.some((v) => v > 0);
-
     if (!hasAnyData) {
       chart.innerHTML = `<div class="chart-empty-msg">No activity recorded this week yet.</div>`;
       const totalRow = $("chartTotalRow");
@@ -1458,28 +1488,31 @@ async function loadWeeklyChart() {
       return;
     }
 
-    chart.innerHTML = days.map((_, i) => {
-      const h  = healthCounts[i];
-      const u  = userCounts[i];
-      const t  = ticketCounts[i];
+    chart.innerHTML = days.map((dateStr, i) => {
+      const h = healthCounts[i];
+      const u = userCounts[i];
+      const t = ticketCounts[i];
       const total = h + u + t;
 
-      // Heights in px — 0 means no bar rendered at all
       const hh = h > 0 ? Math.max(6, Math.round((h / maxVal) * BAR_MAX_H)) : 0;
       const uh = u > 0 ? Math.max(6, Math.round((u / maxVal) * BAR_MAX_H)) : 0;
       const th = t > 0 ? Math.max(6, Math.round((t / maxVal) * BAR_MAX_H)) : 0;
 
-      const healthBar  = h > 0 ? `<div class="day-bar" style="height:${hh}px;background:#2daa2d;" title="Health logs: ${h}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
-      const userBar    = u > 0 ? `<div class="day-bar" style="height:${uh}px;background:#3b82f6;" title="New users: ${u}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
-      const ticketBar  = t > 0 ? `<div class="day-bar" style="height:${th}px;background:#f59e0b;" title="Tickets: ${t}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const healthBar = h > 0 ? `<div class="day-bar" style="height:${hh}px;background:#2daa2d;" title="Health logs: ${h}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const userBar   = u > 0 ? `<div class="day-bar" style="height:${uh}px;background:#3b82f6;" title="New users: ${u}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+      const ticketBar = t > 0 ? `<div class="day-bar" style="height:${th}px;background:#f59e0b;" title="Tickets: ${t}"></div>` : `<div class="day-bar" style="height:0;background:transparent;"></div>`;
+
+      // Get actual day name from the date string
+      const dayName = dayLabels[new Date(dateStr + "T12:00:00").getDay()];
+      const dayNum  = parseInt(dateStr.split("-")[2], 10);
 
       return `
         <div class="day-group">
           <div class="day-bars">
             ${healthBar}${userBar}${ticketBar}
           </div>
-          <div class="day-label">${dayNames[i]}</div>
-          <div class="day-total">${total > 0 ? total : ""}</div>
+          <div class="day-label">${dayName}</div>
+          <div class="day-total">${total > 0 ? dayNum : ""}</div>
         </div>
       `;
     }).join("");
@@ -1684,7 +1717,11 @@ async function viewTicket(ticketId) {
   if (!ticket) return;
 
   show($("ticketPanel"));
-  $("ticketThread").innerHTML = `
+  $("ticketPanel").dataset.ticketId = ticketId;
+  $("ticketReply").value = "";
+
+  const thread = $("ticketThread");
+  thread.innerHTML = `
     <div class="activity-item">
       <div class="time">Created: ${escapeHtml(formatDateTime(ticket.created_at))}</div>
       <div class="description"><strong>${escapeHtml(ticket.subject || "")}</strong></div>
@@ -1692,8 +1729,31 @@ async function viewTicket(ticketId) {
     </div>
   `;
 
-  $("ticketReply").value = "";
-  $("ticketPanel").dataset.ticketId = ticketId;
+  // Load all previous replies so thread persists across open/close
+  try {
+    const { data: replies, error } = await supabaseClient
+      .from("ticket_replies")
+      .select("message, created_at, admin_id")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.warn("Could not load ticket replies:", error.message);
+      return;
+    }
+
+    (replies || []).forEach((r) => {
+      const item = document.createElement("div");
+      item.className = "activity-item";
+      item.innerHTML = `
+        <div class="time">⏰ ${escapeHtml(formatDateTime(r.created_at))}</div>
+        <div class="description">💬 Admin: ${escapeHtml(r.message)}</div>
+      `;
+      thread.appendChild(item);
+    });
+  } catch (err) {
+    console.warn("viewTicket replies fetch error:", err);
+  }
 }
 
 function closeTicketPanel() {
@@ -1711,10 +1771,8 @@ async function sendTicketReply() {
     return;
   }
 
-  const reason = "Ticket reply sent"; // still logged
+  const reason = "Ticket reply sent";
   try {
-    // Try to store the reply in ticket_replies table if it exists,
-    // otherwise just update the ticket's updated_at as a lightweight fallback
     const { error: replyError } = await supabaseClient
       .from("ticket_replies")
       .insert({
@@ -1724,16 +1782,17 @@ async function sendTicketReply() {
         created_at: new Date().toISOString(),
       });
 
-    // Fallback: always bump updated_at on the ticket regardless
+    if (replyError) {
+      console.error("ticket_replies insert failed:", replyError.message);
+      alert(`❌ Reply could not be saved: ${replyError.message}\n\nPlease ensure the ticket_replies table exists in Supabase.`);
+      return;
+    }
+
+    // Bump updated_at on the ticket
     await supabaseClient
       .from("tickets")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", ticketId);
-
-    if (replyError) {
-      // ticket_replies table may not exist yet — that's ok, reply still shows in UI
-      console.warn("ticket_replies insert failed (table may not exist):", replyError.message);
-    }
 
     await logAdminAction({
       module: "tickets",
@@ -2108,6 +2167,21 @@ async function unassignAllFromDoctor() {
    15) REALTIME
    ========================= */
 function setupRealtime() {
+  // Listen for force-logout broadcast targeting THIS admin's own session
+  // (relevant if another admin suspends/archives this admin account)
+  if (state.currentAdminId) {
+    supabaseClient
+      .channel(`force-logout:${state.currentAdminId}`)
+      .on("broadcast", { event: "force_logout" }, async () => {
+        clearInterval(state._sessionWatcher);
+        await supabaseClient.auth.signOut();
+        resetState();
+        showLogin();
+        showAlert("Your account has been suspended or archived by an administrator.");
+      })
+      .subscribe();
+  }
+
   // Activity feed updates
   supabaseClient
     .channel("realtime-admin-dashboard")
@@ -2164,6 +2238,7 @@ window.AdminApp = {
   restoreUser,
   viewTicket,
   updateTicketStatus,
+  updateTicketPriority,
 };
 
 /* =========================
@@ -2193,5 +2268,6 @@ async function updateTicketPriority(ticketId, newPriority) {
     await loadActivityFeed();
   } catch (err) {
     console.error("Priority update failed:", err);
+    alert(`❌ Failed to update priority: ${err.message}`);
   }
 }
