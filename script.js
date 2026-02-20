@@ -149,6 +149,10 @@ function initTabs() {
       btn.classList.add("active");
       const target = btn.dataset.target;
       $(`${target}`)?.classList.add("active");
+
+      // Reload data fresh when switching to certain tabs
+      if (target === "login-history") loadLoginHistory();
+      if (target === "metrics") { loadWeeklyChart(); loadMetrics(); }
     });
   });
 }
@@ -236,6 +240,7 @@ async function checkAdminAndLoad(user) {
   showDashboard();
   await loadAllData();
   setupRealtime();
+  startAutoRefresh(); // Silently refresh activity feed + chart every 30s
   startSessionWatcher(user.id); // Poll every 60s to catch status changes mid-session
 
   setLoading(false);
@@ -393,14 +398,18 @@ function bindUI() {
   $("refreshPatientPickerBtn")?.addEventListener("click", () =>
     loadPatientPicker(),
   );
+  // Login history filters
+  $("loginSearch")?.addEventListener("input", () => applyLoginFilters());
+  $("loginRoleFilter")?.addEventListener("change", () => applyLoginFilters());
 }
 
 function resetState() {
-  // Stop session watcher if running
+  // Stop session watcher and auto-refresh if running
   if (state._sessionWatcher) {
     clearInterval(state._sessionWatcher);
     state._sessionWatcher = null;
   }
+  stopAutoRefresh();
   state.sessionUser = null;
   state.currentAdminId = null;
   state.currentAdminName = null;
@@ -427,7 +436,154 @@ async function loadAllData() {
     loadActivityFeed(),
     loadWeeklyChart(),
     loadDoctors(),
+    loadLoginHistory(),
   ]);
+}
+
+/* =========================
+   AUTO-REFRESH
+   ========================= */
+let _autoRefreshInterval = null;
+
+function startAutoRefresh() {
+  if (_autoRefreshInterval) return; // already running
+  _autoRefreshInterval = setInterval(async () => {
+    // Silently refresh activity feed and chart without disrupting the user
+    const prevScrollTop = $("activityLog")?.scrollTop || 0;
+    await Promise.allSettled([
+      loadActivityFeed(),
+      loadWeeklyChart(),
+      loadMetrics(),
+    ]);
+    // Restore scroll position so feed doesn't jump
+    if ($("activityLog")) $("activityLog").scrollTop = prevScrollTop;
+  }, 30000); // every 30 seconds
+}
+
+function stopAutoRefresh() {
+  if (_autoRefreshInterval) {
+    clearInterval(_autoRefreshInterval);
+    _autoRefreshInterval = null;
+  }
+}
+
+/* =========================
+   LOGIN HISTORY
+   ========================= */
+const loginHistoryState = {
+  allLogs: [],
+  filtered: [],
+  page: 0,
+  pageSize: 20,
+};
+
+async function loadLoginHistory() {
+  const tbody = $("loginHistoryBody");
+  if (!tbody) return;
+
+  // Reset filters on refresh
+  if ($("loginSearch")) $("loginSearch").value = "";
+  if ($("loginRoleFilter")) $("loginRoleFilter").value = "";
+
+  tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading...</td></tr>';
+
+  const [logsRes, profilesRes] = await Promise.all([
+    supabaseClient
+      .from("login_logs")
+      .select("user_id, email, full_name, role, logged_in_at")
+      .order("logged_in_at", { ascending: false })
+      .limit(500),
+    supabaseClient
+      .from("profiles")
+      .select("id, full_name, email"),
+  ]);
+
+  if (logsRes.error) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color:red">Error loading login history</td></tr>`;
+    console.error("loadLoginHistory error:", logsRes.error);
+    return;
+  }
+
+  // Build a profile map for name lookup
+  const profileMap = {};
+  (profilesRes.data || []).forEach((p) => {
+    profileMap[p.id] = p.full_name || p.email || "";
+  });
+
+  // Enrich login logs with profile names as fallback
+  loginHistoryState.allLogs = (logsRes.data || []).map((l) => ({
+    ...l,
+    full_name: profileMap[l.user_id] || l.full_name || "",
+  }));
+
+  loginHistoryState.page = 0;
+  applyLoginFilters();
+}
+
+function applyLoginFilters() {
+  const search = ($("loginSearch")?.value || "").toLowerCase().trim();
+  const role   = ($("loginRoleFilter")?.value || "").toLowerCase();
+
+  loginHistoryState.filtered = loginHistoryState.allLogs.filter((l) => {
+    const matchSearch =
+      !search ||
+      (l.full_name || "").toLowerCase().includes(search) ||
+      (l.email || "").toLowerCase().includes(search);
+    const matchRole = !role || (l.role || "").toLowerCase() === role;
+    return matchSearch && matchRole;
+  });
+
+  loginHistoryState.page = 0;
+  renderLoginHistory();
+}
+
+function renderLoginHistory() {
+  const tbody = $("loginHistoryBody");
+  const pagination = $("loginHistoryPagination");
+  if (!tbody) return;
+
+  const { filtered, page, pageSize } = loginHistoryState;
+  const start = page * pageSize;
+  const end   = start + pageSize;
+  const slice = filtered.slice(start, end);
+  const totalPages = Math.ceil(filtered.length / pageSize);
+
+  if (!slice.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No login records found.</td></tr>';
+    if (pagination) pagination.innerHTML = "";
+    return;
+  }
+
+  tbody.innerHTML = slice.map((l) => `
+    <tr>
+      <td>${escapeHtml(l.full_name || "—")}</td>
+      <td>${escapeHtml(l.email || "—")}</td>
+      <td><span style="text-transform:capitalize;">${escapeHtml(l.role || "patient")}</span></td>
+      <td>${escapeHtml(formatDateTime(l.logged_in_at))}</td>
+    </tr>
+  `).join("");
+
+  // Pagination controls
+  if (pagination) {
+    if (totalPages <= 1) {
+      pagination.innerHTML = `<small style="color:#888">${filtered.length} record${filtered.length !== 1 ? "s" : ""}</small>`;
+    } else {
+      pagination.innerHTML = `
+        <div style="display:flex;gap:8px;align-items:center;justify-content:center;">
+          <button onclick="loginHistoryPage(-1)" ${page === 0 ? "disabled" : ""} style="padding:5px 12px;border:1px solid #ddd;border-radius:5px;cursor:pointer;">◀ Prev</button>
+          <small style="color:#555">Page ${page + 1} of ${totalPages} &nbsp;·&nbsp; ${filtered.length} records</small>
+          <button onclick="loginHistoryPage(1)" ${page >= totalPages - 1 ? "disabled" : ""} style="padding:5px 12px;border:1px solid #ddd;border-radius:5px;cursor:pointer;">Next ▶</button>
+        </div>
+      `;
+    }
+  }
+}
+
+function loginHistoryPage(dir) {
+  const { filtered, page, pageSize } = loginHistoryState;
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  loginHistoryState.page = Math.max(0, Math.min(page + dir, totalPages - 1));
+  renderLoginHistory();
 }
 
 /* =========================

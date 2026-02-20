@@ -113,6 +113,9 @@
           <button class="nav-tab" data-target="doctors" type="button">
             🩺 Doctor Workflows
           </button>
+          <button class="nav-tab" data-target="login-history" type="button">
+            🔐 Login History
+          </button>
         </nav>
 
         <!-- =========================
@@ -472,6 +475,47 @@
             </div>
           </div>
         </section>
+
+        <!-- =========================
+           TAB: LOGIN HISTORY
+           ========================= -->
+        <section id="login-history" class="tab-content" aria-label="Login history">
+          <h2 class="section-title">🔐 Login History</h2>
+          <div style="margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input
+              type="text"
+              id="loginSearch"
+              placeholder="Search by name or email..."
+              style="padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:13px; width:260px;"
+            />
+            <select id="loginRoleFilter" style="padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:13px;">
+              <option value="">All Roles</option>
+              <option value="patient">Patient</option>
+              <option value="doctor">Doctor</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button id="refreshLoginBtn" class="btn-refresh" type="button" onclick="loadLoginHistory()" style="padding:8px 14px;">
+              🔄 Refresh
+            </button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Logged In At</th>
+                </tr>
+              </thead>
+              <tbody id="loginHistoryBody">
+                <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="loginHistoryPagination" style="margin-top:10px; text-align:center;"></div>
+        </section>
+
       </div>
     </div>
 
