@@ -303,6 +303,21 @@ function bindUI() {
       setLoading(false);
       return;
     }
+
+    // Track admin login in login_logs
+    if (data?.user) {
+      const meta = data.user.user_metadata || {};
+      supabaseClient.from("login_logs").insert({
+        user_id: data.user.id,
+        email: data.user.email || "",
+        full_name: meta.full_name || meta.name || "",
+        role: "admin",
+        logged_in_at: new Date().toISOString(),
+      }).then(({ error: logErr }) => {
+        if (logErr) console.warn("Admin login log failed:", logErr.message);
+      });
+    }
+
     await checkAdminAndLoad(data.user);
   });
 
