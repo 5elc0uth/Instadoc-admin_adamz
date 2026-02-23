@@ -150,11 +150,27 @@ function initTabs() {
       const target = btn.dataset.target;
       $(`${target}`)?.classList.add("active");
 
+      // Save active tab so page reload restores it
+      localStorage.setItem("instadoc_active_tab", target);
+
       // Reload data fresh when switching to certain tabs
       if (target === "login-history") loadLoginHistory();
       if (target === "metrics") { loadWeeklyChart(); loadMetrics(); }
     });
   });
+
+  // Restore last active tab on page load
+  const savedTab = localStorage.getItem("instadoc_active_tab");
+  if (savedTab) {
+    const savedBtn = document.querySelector(`.nav-tab[data-target="${savedTab}"]`);
+    const savedContent = $(`${savedTab}`);
+    if (savedBtn && savedContent) {
+      qsa(".nav-tab").forEach((b) => b.classList.remove("active"));
+      qsa(".tab-content").forEach((c) => c.classList.remove("active"));
+      savedBtn.classList.add("active");
+      savedContent.classList.add("active");
+    }
+  }
 }
 
 /* =========================
@@ -1550,8 +1566,7 @@ async function loadActivityFeed() {
     (bpRes.data || []).forEach((x) => {
       const user = idToName[x.user_id];
       if (user?.deleted_at) return; // hide archived users
-      const name = user?.name || "Unknown User";
-      if (x.systolic == null || x.diastolic == null) return;
+      const name = user?.name || user?.email || "Unknown User";
       healthItems.push({
         kind: "health",
         module: "health",
@@ -1564,7 +1579,7 @@ async function loadActivityFeed() {
     (weightRes.data || []).forEach((x) => {
       const user = idToName[x.user_id];
       if (user?.deleted_at) return;
-      const name = user?.name || "Unknown User";
+      const name = user?.name || user?.email || "Unknown User";
       if (x.weight == null) return;
       healthItems.push({
         kind: "health",
@@ -1578,7 +1593,7 @@ async function loadActivityFeed() {
     (glucoseRes.data || []).forEach((x) => {
       const user = idToName[x.user_id];
       if (user?.deleted_at) return;
-      const name = user?.name || "Unknown User";
+      const name = user?.name || user?.email || "Unknown User";
       if (x.level == null) return;
       healthItems.push({
         kind: "health",
@@ -1591,7 +1606,7 @@ async function loadActivityFeed() {
 
     const apptItems = [];
     (apptRes.data || []).forEach((x) => {
-      const patientName = x.patient_name || idToName[x.user_id]?.name || "Unknown Patient";
+      const patientName = x.patient_name || idToName[x.user_id]?.name || idToName[x.user_id]?.email || "Unknown Patient";
       const doctorName  = x.doctor_name || "Unknown Doctor";
       const apptType    = x.type || "appointment";
       apptItems.push({
