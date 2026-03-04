@@ -1365,30 +1365,30 @@ function getHealthStatus(log) {
    ========================= */
 function activityIcon(module, action) {
   if (module === "users") {
-    if (action === "created") return "👤";
-    if (action === "updated") return "✏️";
-    if (action === "suspended") return "⛔";
-    if (action === "inactive") return "⏸️";
-    if (action === "active") return "✅";
-    if (action === "archived") return "🗄️";
-    if (action === "restored") return "♻️";
-    return "👥";
+    if (action === "created") return '<i class="fa-solid fa-user-plus"></i>';
+    if (action === "updated") return '<i class="fa-solid fa-user-pen"></i>';
+    if (action === "suspended") return '<i class="fa-solid fa-user-slash"></i>';
+    if (action === "inactive") return '<i class="fa-solid fa-circle-pause"></i>';
+    if (action === "active") return '<i class="fa-solid fa-user-check"></i>';
+    if (action === "archived") return '<i class="fa-solid fa-box-archive"></i>';
+    if (action === "restored") return '<i class="fa-solid fa-trash-arrow-up"></i>';
+    return '<i class="fa-solid fa-users"></i>';
   }
   if (module === "tickets") {
-    if (action === "created") return "🎫";
-    if (action === "progress") return "🟡";
-    if (action === "resolved") return "🟢";
-    if (action === "reopened") return "🔁";
-    if (action === "replied") return "💬";
-    return "🎫";
+    if (action === "created") return '<i class="fa-solid fa-ticket"></i>';
+    if (action === "progress") return '<i class="fa-solid fa-spinner"></i>';
+    if (action === "resolved") return '<i class="fa-solid fa-circle-check"></i>';
+    if (action === "reopened") return '<i class="fa-solid fa-arrow-rotate-left"></i>';
+    if (action === "replied") return '<i class="fa-solid fa-comment-dots"></i>';
+    return '<i class="fa-solid fa-ticket"></i>';
   }
   if (module === "doctors") {
-    if (action === "assigned_patient") return "🩺";
-    if (action === "unassigned_patient") return "➖";
-    if (action === "unassigned_all") return "🧹";
-    return "🩺";
+    if (action === "assigned_patient") return '<i class="fa-solid fa-user-doctor"></i>';
+    if (action === "unassigned_patient") return '<i class="fa-solid fa-user-minus"></i>';
+    if (action === "unassigned_all") return '<i class="fa-solid fa-broom"></i>';
+    return '<i class="fa-solid fa-stethoscope"></i>';
   }
-  return "🔔";
+  return '<i class="fa-solid fa-bell"></i>';
 }
 
 // Pagination state for activity feed
@@ -1421,19 +1421,20 @@ function renderActivityPage() {
     item.className = "activity-item";
     const icon =
       a.kind === "appointment"
-        ? "📅"
+        ? '<i class="fa-solid fa-calendar-check"></i>'
         : a.kind === "health"
         ? a.action === "bp"
-          ? "🩸"
+          ? '<i class="fa-solid fa-heart-pulse"></i>'
           : a.action === "weight"
-            ? "⚖️"
-            : "🧪"
+            ? '<i class="fa-solid fa-weight-scale"></i>'
+            : '<i class="fa-solid fa-droplet"></i>'
         : activityIcon(a.module, a.action);
 
+    // Note: We don't escapeHtml on the icon since it contains HTML tags now
     item.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div class="time">⏰ ${escapeHtml(timeAgo(a.created_at))}</div>
+          <div class="time"><i class="fa-solid fa-clock"></i> ${escapeHtml(timeAgo(a.created_at))}</div>
           <div class="description">${icon} ${escapeHtml(a.description || "")}</div>
         </div>
       </div>
@@ -1473,7 +1474,7 @@ async function loadActivityFeed() {
   activityFeedState.allItems = [];
   activityFeedState.loaded = false;
 
-  container.innerHTML = `<div class="activity-item"><div class="description">⏳ Loading...</div></div>`;
+  container.innerHTML = `<div class="activity-item"><div class="description"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div></div>`;
 
   try {
     // Build a profile map so we can display names instead of emails everywhere
@@ -1677,7 +1678,7 @@ async function loadWeeklyChart() {
   const chart = $("weeklyChart");
   if (!chart) return;
 
-  chart.innerHTML = `<div class="chart-empty-msg">⏳ Loading chart...</div>`;
+  chart.innerHTML = `<div class="chart-empty-msg"><i class="fa-solid fa-spinner fa-spin"></i> Loading chart...</div>`;
 
   try {
     const today = new Date();
@@ -2012,8 +2013,8 @@ async function viewTicket(ticketId) {
       const item = document.createElement("div");
       item.className = "activity-item";
       item.innerHTML = `
-        <div class="time">⏰ ${escapeHtml(formatDateTime(r.created_at))}</div>
-        <div class="description">💬 Admin: ${escapeHtml(r.message)}</div>
+        <div class="time"><i class="fa-solid fa-clock"></i> ${escapeHtml(formatDateTime(r.created_at))}</div>
+        <div class="description"><i class="fa-solid fa-comment"></i> Admin: ${escapeHtml(r.message)}</div>
       `;
       thread.appendChild(item);
     });
@@ -2071,8 +2072,8 @@ async function sendTicketReply() {
     const item = document.createElement("div");
     item.className = "activity-item";
     item.innerHTML = `
-      <div class="time">⏰ ${escapeHtml(timeAgo(new Date().toISOString()))}</div>
-      <div class="description">💬 Admin: ${escapeHtml(message)}</div>
+      <div class="time"><i class="fa-solid fa-clock"></i> ${escapeHtml(timeAgo(new Date().toISOString()))}</div>
+      <div class="description"><i class="fa-solid fa-comment"></i> Admin: ${escapeHtml(message)}</div>
     `;
     $("ticketThread").appendChild(item);
     $("ticketReply").value = "";
@@ -2092,6 +2093,7 @@ async function loadDoctors() {
   if (!container) return;
   container.textContent = "Loading...";
 
+  // 1. Fetch doctors from profiles table
   const { data, error } = await supabaseClient
     .from("profiles")
     .select("id, full_name, email, role, status, deleted_at")
@@ -2103,7 +2105,20 @@ async function loadDoctors() {
     return;
   }
 
-  state.allDoctors = (data || []).filter((d) => !d.deleted_at);
+  // 2. Fetch verification statuses from doctor_profiles table
+  const { data: docProfs } = await supabaseClient
+    .from("doctor_profiles")
+    .select("id, is_verified");
+    
+  const verifiedMap = {};
+  (docProfs || []).forEach(dp => verifiedMap[dp.id] = dp.is_verified);
+
+  // 3. Map the verification status to the main array
+  state.allDoctors = (data || []).filter((d) => !d.deleted_at).map(d => ({
+    ...d,
+    is_verified: !!verifiedMap[d.id] // defaults to false if no record exists yet
+  }));
+
   filterDoctors();
 }
 
@@ -2134,21 +2149,66 @@ function renderDoctorList(doctors) {
     item.className = "list-item";
     const status = normalizeUserStatus(d);
 
+    // Verification UI Logic
+    const verifiedBadge = d.is_verified
+      ? `<span class="badge badge-active" style="font-size:10px; margin-left:8px;">Verified</span>`
+      : `<span class="badge badge-suspended" style="font-size:10px; margin-left:8px;">Pending</span>`;
+
+    const verifyBtnText = d.is_verified ? "Revoke" : "Verify";
+    const verifyBtnClass = d.is_verified ? "btn-inactive" : "btn-activate";
+
     item.innerHTML = `
       <div class="meta">
-        <div class="title">${escapeHtml(d.full_name || "Doctor")}</div>
+        <div class="title" style="display:flex; align-items:center;">
+            ${escapeHtml(d.full_name || "Doctor")} ${verifiedBadge}
+        </div>
         <div class="sub">${escapeHtml(d.email || "")} • ${escapeHtml(status)}</div>
       </div>
       <div class="right">
-        <button class="btn btn-view" type="button">Select</button>
+        <button class="btn ${verifyBtnClass}" type="button" onclick="AdminApp.toggleVerifyDoctor('${d.id}', ${d.is_verified})">${verifyBtnText}</button>
+        <button class="btn btn-view select-doc-btn" type="button">Select</button>
       </div>
     `;
 
     item
-      .querySelector("button")
+      .querySelector(".select-doc-btn")
       ?.addEventListener("click", () => selectDoctor(d));
+      
     container.appendChild(item);
   });
+}
+
+async function toggleVerifyDoctor(doctorId, currentStatus) {
+  const newStatus = !currentStatus;
+  const actionWord = newStatus ? "Verify" : "Revoke verification for";
+
+  if (!confirm(`Are you sure you want to ${actionWord} this doctor?`)) return;
+
+  try {
+    // Upsert ensures it works even if the doctor hasn't logged in to create their profile yet
+    const { error } = await supabaseClient
+        .from('doctor_profiles')
+        .upsert({ id: doctorId, is_verified: newStatus });
+
+    if (error) throw error;
+
+    // Push to the Activity Feed & Audit Log
+    await logAdminAction({
+      module: "doctors",
+      action: newStatus ? "updated" : "suspended", 
+      target_user_id: doctorId,
+      description: `${state.currentAdminName} ${newStatus ? 'verified' : 'revoked verification for'} doctor.`,
+      reason: "Admin verification toggle",
+    });
+
+    alert(`✅ Doctor successfully ${newStatus ? 'verified' : 'revoked'}.`);
+    
+    await loadDoctors();
+    await loadActivityFeed();
+  } catch (err) {
+    console.error("toggleVerifyDoctor error:", err);
+    alert(`❌ Failed to update verification: ${err.message}`);
+  }
 }
 
 async function selectDoctor(doctor) {
@@ -2505,6 +2565,7 @@ window.AdminApp = {
   viewTicket,
   updateTicketStatus,
   updateTicketPriority,
+  toggleVerifyDoctor
 };
 
 /* =========================

@@ -7,6 +7,7 @@
 
     <!-- Supabase Client (v2) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <link rel="stylesheet" href="style.css" />
     <script defer src="script.js"></script>
@@ -102,19 +103,16 @@
         <!-- Tabs -->
         <nav class="nav-tabs" aria-label="Dashboard navigation">
           <button class="nav-tab active" data-target="users" type="button">
-            👥 User Management
+            <i class="fa-solid fa-users"></i> User Management
           </button>
           <button class="nav-tab" data-target="metrics" type="button">
-            📊 Live Metrics
+            <i class="fa-solid fa-chart-line"></i> Live Metrics
           </button>
           <button class="nav-tab" data-target="support" type="button">
-            🎫 Support Tickets
+            <i class="fa-solid fa-ticket"></i> Support Tickets
           </button>
           <button class="nav-tab" data-target="doctors" type="button">
-            🩺 Doctor Workflows
-          </button>
-          <button class="nav-tab" data-target="login-history" type="button">
-            🔐 Login History
+            <i class="fa-solid fa-user-doctor"></i> Doctor Workflows
           </button>
         </nav>
 
@@ -134,7 +132,7 @@
               class="btn-primary user-only"
               type="button"
             >
-              + New User
+              <i class="fa-solid fa-plus"></i> New User
             </button>
 
             <div class="search-box">
@@ -171,7 +169,7 @@
             </div>
 
             <button id="refreshUsersBtn" class="btn-refresh" type="button">
-              🔄 Refresh
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh
             </button>
           </div>
 
@@ -216,7 +214,7 @@
 
           <div class="stats-grid">
             <div class="stat-card users">
-              <h3>👥 Total Users</h3>
+              <h3><i class="fa-solid fa-users"></i> Total Users</h3>
               <div id="count-users" class="value">
                 <span class="loading-spinner">⏳</span>
               </div>
@@ -224,7 +222,7 @@
             </div>
 
             <div class="stat-card doctors">
-              <h3>💉 BP Logs</h3>
+              <h3><i class="fa-solid fa-heart-pulse"></i> BP Logs</h3>
               <div id="count-bp" class="value">
                 <span class="loading-spinner">⏳</span>
               </div>
@@ -232,7 +230,7 @@
             </div>
 
             <div class="stat-card patients">
-              <h3>⚖️ Weight Logs</h3>
+              <h3><i class="fa-solid fa-weight-scale"></i> Weight Logs</h3>
               <div id="count-weight" class="value">
                 <span class="loading-spinner">⏳</span>
               </div>
@@ -240,7 +238,7 @@
             </div>
 
             <div class="stat-card sessions">
-              <h3>🩸 Glucose Logs</h3>
+              <h3><i class="fa-solid fa-droplet"></i> Glucose Logs</h3>
               <div id="count-glucose" class="value">
                 <span class="loading-spinner">⏳</span>
               </div>
@@ -249,7 +247,7 @@
           </div>
 
           <div class="chart-container">
-            <div class="chart-title">📊 Recent Health Logs</div>
+            <div class="chart-title"><i class="fa-solid fa-file-medical"></i> Recent Health Logs</div>
 
             <div class="controls-bar" style="margin-bottom: 15px">
               <select
@@ -263,7 +261,7 @@
                 <option value="glucose">Glucose</option>
               </select>
               <button id="refreshLogsBtn" class="btn-refresh" type="button">
-                🔄 Refresh
+                <i class="fa-solid fa-arrows-rotate"></i> RefreshRefresh
               </button>
             </div>
 
@@ -290,10 +288,10 @@
           </div>
 
           <div class="chart-container">
-            <div class="chart-title">🔔 Live Activity Feed</div>
+            <div class="chart-title"><i class="fa-solid fa-bell"></i> Live Activity Feed</div>
             <div id="activityLog" class="activity-log" aria-live="polite">
               <div class="activity-item">
-                <div class="time">⏰ Loading...</div>
+                <div class="time"><i class="fa-solid fa-clock"></i> Loading...</div>
                 <div class="description">
                   Fetching recent platform activity...
                 </div>
@@ -303,7 +301,7 @@
 
           <div class="chart-container">
             <div class="chart-header">
-              <div class="chart-title">📊 This Week's Platform Activity</div>
+              <div class="chart-title"><i class="fa-solid fa-chart-column"></i> This Week's Platform Activity</div>
               <div class="chart-legend">
                 <span class="legend-item"><span class="legend-dot" style="background:#2daa2d"></span>Health Logs</span>
                 <span class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>New Users</span>
@@ -326,22 +324,22 @@
 
           <div class="stats-grid">
             <div class="stat-card urgent">
-              <h3>🔵 Open Tickets</h3>
+              <h3><i class="fa-solid fa-envelope-open"></i> Open Tickets</h3>
               <div id="openTickets" class="value">0</div>
               <div class="trend">Requires Attention</div>
             </div>
             <div class="stat-card pending">
-              <h3>🟡 In Progress</h3>
+              <h3><i class="fa-solid fa-spinner"></i> In Progress</h3>
               <div id="progressTickets" class="value">0</div>
               <div class="trend">Being Handled</div>
             </div>
             <div class="stat-card resolved">
-              <h3>🟢 Resolved</h3>
+              <h3><i class="fa-solid fa-check-circle"></i> Resolved</h3>
               <div id="resolvedTickets" class="value">0</div>
               <div class="trend">Completed</div>
             </div>
             <div class="stat-card info">
-              <h3>⏱️ Avg Response</h3>
+              <h3><i class="fa-solid fa-stopwatch"></i> Avg Response</h3>
               <div id="avgResponse" class="value" style="font-size: 28px">
                 N/A
               </div>
@@ -354,7 +352,7 @@
               <input
                 id="ticketSearch"
                 type="text"
-                placeholder="🔍 Search tickets by ID, user, or subject..."
+                placeholder="Search tickets by ID, user, or subject..."
               />
             </div>
 
@@ -383,7 +381,7 @@
             </div>
 
             <button id="refreshTicketsBtn" class="btn-refresh" type="button">
-              🔄 Refresh
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh
             </button>
           </div>
 
@@ -441,7 +439,7 @@
               />
             </div>
             <button id="refreshDoctorsBtn" class="btn-refresh" type="button">
-              🔄 Refresh
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh
             </button>
           </div>
 
@@ -460,7 +458,7 @@
                   type="button"
                   disabled
                 >
-                  + Assign Patient
+                  <i class="fa-solid fa-plus"></i> Assign
                 </button>
                 <button
                   id="unassignAllBtn"
@@ -495,7 +493,7 @@
               <option value="admin">Admin</option>
             </select>
             <button id="refreshLoginBtn" class="btn-refresh" type="button" onclick="loadLoginHistory()" style="padding:8px 14px;">
-              🔄 Refresh
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh
             </button>
           </div>
           <div class="table-container">
@@ -624,7 +622,7 @@
             class="btn-refresh"
             type="button"
           >
-            🔄 Refresh
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
           </button>
         </div>
 

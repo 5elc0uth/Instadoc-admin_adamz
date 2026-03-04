@@ -1499,3 +1499,54 @@ body {
   border-color: #1976d2;
   box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
 }
+
+/* =========================================
+   UNIFORM GREEN ICONS
+   ========================================= */
+i.fa-solid {
+    color: var(--primary-color);
+    margin-right: 8px;
+}
+
+/* Make icons inside colored buttons turn white */
+.btn-primary i.fa-solid,
+.btn-activate i.fa-solid,
+.btn-refresh i.fa-solid {
+    color: var(--white);
+}
+
+/* Nav Tab Icons default to grey, turn green on hover/active */
+.nav-tab i.fa-solid {
+    color: #666;
+    transition: color 0.3s ease;
+}
+
+.nav-tab.active i.fa-solid,
+.nav-tab:hover i.fa-solid {
+    color: var(--primary-color);
+}
+
+/* Slightly larger icons for the stat cards */
+.stat-card h3 i.fa-solid {
+    font-size: 1.3em;
+}
+
+/* Activity feed timeline icon sizing */
+.activity-item .time i.fa-solid {
+    font-size: 1.1em;
+}
+
+/* =========================================
+   ADMIN LOGIN BUTTON FIX
+   ========================================= */
+#loginBtn {
+    width: 100%;
+    margin: 0 auto !important; /* Forces it to center and removes the rogue left margin */
+    padding: 14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, var(--primary-color), #03b34d);
+    font-size: 16px;
+    border-radius: 8px;
+}
