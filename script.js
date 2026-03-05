@@ -2598,3 +2598,5 @@ async function updateTicketPriority(ticketId, newPriority) {
     alert(`❌ Failed to update priority: ${err.message}`);
   }
 }
+
+
